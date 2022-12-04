@@ -1,33 +1,47 @@
-/*
- * bundle模板文件
- */
-// 需要考虑作用域隔离：用函数包裹
-// import不能在非顶级作用域被使用：需要用sea.js思想,实现require
 (function (modules) {
-  function require(filePath) {
-    const fn = modules[filePath]
+  function require(id) {
+    /*
+     * fn 对应路径下函数
+     * mapping 映射关系
+     */
+    const [fn, mapping] = modules[id]
 
     const module = {
       exports: {}
     }
-    fn(require, module, module.exports)
 
+    // 使require通过路径ID拿到文件路径
+    function localRequire(filePath) {
+      const id = mapping[filePath]
+      // 通过require找到文件中引用的文件，形成递归
+      return require(id)
+    }
+
+    // 当前文件下的fn，传入localRequire用于require引用
+    fn(localRequire, module, module.exports)
+    // 将被调用的文件的exports返回
     return module.exports
   }
-  require('./main.js')
-})({ // 路径和函数映射
-  "./foo.js": function (require, module, exports) {
+
+  require(1)
+})({
+
+  1: [function (require, module, exports) {
+    const { foo } = require("./foo.js")
+    foo()
+    console.log('main.js')
+  }, {
+    "./foo.js": 2,
+  }],
+
+  2: [function (require, module, exports) {
     function foo() {
-      console.log('foo')
+      console.log('foo.js');
     }
+
     module.exports = {
-      foo,
+      foo
     }
-  },
-  "./main.js": function (require, module, exports) {
-  // import {foo} from "./foo.js";
-  const {foo} = require('./foo.js')
-  foo();
-  console.log('main.js')
-  }
+  }, {}],
+
 })

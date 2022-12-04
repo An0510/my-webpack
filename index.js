@@ -5,6 +5,8 @@ import traverse from '@babel/traverse'
 import { transformFromAst } from 'babel-core'
 import * as path from "path";
 
+let id = 0
+
 function createAsset(filePath) {
   // 1.获取文件内容
   const source = fs.readFileSync(filePath, {
@@ -17,6 +19,7 @@ function createAsset(filePath) {
     sourceType: 'module'
   })
   // console.log(ast,traverse)
+  // 存储当前文件中所有引用文件路径
   const deps = []
   // 获取ast树中ImportDeclaration中的value部分
   traverse.default(ast, {
@@ -34,7 +37,9 @@ function createAsset(filePath) {
   return {
     filePath,
     code,
-    deps
+    deps,
+    mapping: {},
+    id: id++,
   }
 }
 
@@ -50,6 +55,8 @@ function createGraph() {
     asset.deps.forEach((relativePath) => {
       // 文件内容及依赖关系
       const child = createAsset(path.resolve("./example", relativePath))
+      // example: { "./foo.js" : 2 }
+      asset.mapping[relativePath] = child.id
       queue.push(child)
     })
   }
@@ -65,9 +72,11 @@ function build(graph) {
     encoding: "utf-8"
   })
   const data = graph.map((asset) => {
+    const { id, code, mapping } = asset
     return {
-      filePath: asset.filePath,
-      code: asset.code
+      id,
+      code,
+      mapping
     }
   })
   // ejs模板
@@ -76,7 +85,7 @@ function build(graph) {
   console.log('data', data)
   fs.writeFileSync('./dist/bundle.js', code)
 
-  console.log('bundle',code)
+  console.log('bundle', code)
 }
 
 build(graph)
