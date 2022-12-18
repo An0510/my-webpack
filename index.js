@@ -4,14 +4,50 @@ import parser from '@babel/parser'
 import traverse from '@babel/traverse'
 import { transformFromAst } from 'babel-core'
 import * as path from "path";
+import { jsonLoader } from './jsonLoader.js'
+
+const webpackConfig = {
+  module: {
+    rules: [
+      {
+        test: /\.json$/,
+        // 当链式调用多个loader时，是反方向执行的
+        use: [jsonLoader]
+      }
+    ]
+  },
+}
 
 let id = 0
 
 function createAsset(filePath) {
   // 1.获取文件内容
-  const source = fs.readFileSync(filePath, {
+  let source = fs.readFileSync(filePath, {
     encoding: "utf-8"
   })
+
+  // initLoader
+  const loaders = webpackConfig.module.rules
+  // webpack可以在loader中调用this，实际上是通过声明一个上下文绑定到函数的方式
+  const loaderContext = {
+    addDeps(dep){
+      console.log("addDeps",dep)
+    }
+  }
+  loaders.forEach(({ test, use }) => {
+    if (test.test(filePath)) {
+      if(Array.isArray(use)){
+        use.reverse().forEach((fn) => {
+            // 将loaderContext作为fn的this
+            source = fn.call(loaderContext,source)
+        })
+      } else {
+        // 通过loader之后更新source为js
+        source = use.call(loaderContext,source)
+      }
+    }
+  })
+
   // console.log(source)
   // 2.获取依赖关系 正则/AST(@babel/parser(解析AST)+@babel/traverse(遍历AST))
   // 获取AST树节点

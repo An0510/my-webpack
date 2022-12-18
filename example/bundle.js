@@ -10,7 +10,10 @@
       exports: {}
     }
 
-    // 使require通过路径ID拿到文件路径
+    /*
+     * 使require通过路径ID拿到文件路径
+     * filePath：路径ID
+     */
     function localRequire(filePath) {
       const id = mapping[filePath]
       // 通过require找到文件中引用的文件，形成递归
