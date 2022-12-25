@@ -5,6 +5,8 @@ import traverse from '@babel/traverse'
 import { transformFromAst } from 'babel-core'
 import * as path from "path";
 import { jsonLoader } from './jsonLoader.js'
+import { ChangeOutputPath } from './ChangeOutputPath.js'
+import { SyncHook } from "tapable";
 
 const webpackConfig = {
   module: {
@@ -16,6 +18,12 @@ const webpackConfig = {
       }
     ]
   },
+  plugins: [new ChangeOutputPath()]
+}
+
+const hooks = {
+  // 需要传入context上下文
+  emitFile: new SyncHook(["context"])
 }
 
 let id = 0
@@ -30,20 +38,20 @@ function createAsset(filePath) {
   const loaders = webpackConfig.module.rules
   // webpack可以在loader中调用this，实际上是通过声明一个上下文绑定到函数的方式
   const loaderContext = {
-    addDeps(dep){
-      console.log("addDeps",dep)
+    addDeps(dep) {
+      console.log("addDeps", dep)
     }
   }
   loaders.forEach(({ test, use }) => {
     if (test.test(filePath)) {
-      if(Array.isArray(use)){
+      if (Array.isArray(use)) {
         use.reverse().forEach((fn) => {
-            // 将loaderContext作为fn的this
-            source = fn.call(loaderContext,source)
+          // 将loaderContext作为fn的this
+          source = fn.call(loaderContext, source)
         })
       } else {
         // 通过loader之后更新source为js
-        source = use.call(loaderContext,source)
+        source = use.call(loaderContext, source)
       }
     }
   })
@@ -85,7 +93,6 @@ function createAsset(filePath) {
 // 建立图结构
 function createGraph() {
   const mainAsset = createAsset("./example/main.js")
-
   const queue = [mainAsset]
   for (const asset of queue) {
     asset.deps.forEach((relativePath) => {
@@ -98,6 +105,15 @@ function createGraph() {
   }
   return queue
 }
+
+// 初始化调用plugins
+function initPlugins() {
+  const plugins = webpackConfig.plugins
+  plugins.forEach((plugin) => {
+      plugin.apply(hooks)
+  })
+}
+initPlugins()
 
 const graph = createGraph()
 // console.log(graph)
@@ -119,7 +135,16 @@ function build(graph) {
   const code = ejs.render(template, { data });
 
   console.log('data', data)
-  fs.writeFileSync('./dist/bundle.js', code)
+
+  let outputPath = './dist/bundle.js';
+  // 和loader传入context思想类似
+  const context = {
+    changeOutputPath (path){
+      outputPath = path
+    }
+  }
+  hooks.emitFile.call(context)
+  fs.writeFileSync(outputPath, code)
 
   console.log('bundle', code)
 }
